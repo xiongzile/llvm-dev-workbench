@@ -10,11 +10,23 @@ independent project, unaffiliated with LLVM or Anthropic.
 
 ## Install and open
 
-You need Rust/Cargo, Xcode Command Line Tools, CMake, Ninja, and Python 3 installed.
-You also need an LLVM source checkout. Your chosen LLVM version may have
-additional requirements.
+1. Download **[LLVM Workbench for macOS](https://github.com/xiongzile/llvm-dev-workbench/releases/latest)**
+   and choose the `macos-arm64.zip` asset. Requires an Apple Silicon Mac with macOS 14 or later.
+2. Unzip it and drag **LLVM Workbench.app** into your Applications folder.
+3. Open the app and select your LLVM source checkout.
 
-Build the app from source:
+The download includes the app; you do not need Rust or Cargo to use it. To build
+LLVM projects, install Xcode Command Line Tools, CMake, Ninja, and Python 3.
+Your chosen LLVM version or components may have additional requirements.
+
+This preview is not Developer ID signed or notarized. If macOS blocks it on first
+launch, review [Apple's guidance on opening downloaded apps](https://support.apple.com/en-us/102445).
+If you trust this download, use **System Settings → Privacy & Security → Open Anyway**.
+The release also includes a SHA-256 checksum file for verifying the download.
+
+### Build the app from source (optional)
+
+For contributors, install Rust/Cargo as well, then run:
 
 ```sh
 git clone git@github.com:xiongzile/llvm-dev-workbench.git
@@ -23,8 +35,7 @@ scripts/build-macos.sh
 open "dist/LLVM Workbench.app"
 ```
 
-You can then copy `dist/LLVM Workbench.app` into your Applications folder and
-launch it normally. The current app is locally signed and is not notarized.
+The resulting app is at `dist/LLVM Workbench.app`.
 
 ## Choose your language
 
