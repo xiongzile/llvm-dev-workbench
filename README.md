@@ -1,19 +1,20 @@
 # LLVM Dev Workbench
 
-A native macOS workspace for LLVM development, with a CLI backed by the same Rust
-Core. Open an LLVM monorepo, choose projects/backends/runtimes, prepare independent
-build environments, discover actual outputs, and build/run/test selected targets.
-Built through **vibe coding**, with a **Claude-inspired UI**: warm neutral
-surfaces, restrained terracotta accents, and a quiet workspace layout. The native
-app supports **macOS 14+ on Apple Silicon**; its interface is currently in Chinese.
-This is an independent project, unaffiliated with LLVM or Anthropic.
+A macOS app for working on LLVM without remembering a long list of CMake and
+build commands. Choose the components you need, build a tool, and run its tests
+from one window.
 
-## Try the app
+Built through **vibe coding**, with a **Claude-inspired UI**. Supports **macOS 14+
+on Apple Silicon**. The app interface is currently in Chinese. This is an
+independent project, unaffiliated with LLVM or Anthropic.
 
-Prerequisites: Rust/Cargo, Xcode Command Line Tools (including Swift and a C/C++
-compiler), CMake, Ninja, and Python 3 for LLVM's test tools. Your LLVM checkout
-may require newer tool versions or additional dependencies. Install prerequisites
-before building; Workbench does not install them automatically.
+## Install and open
+
+You need Rust/Cargo, Xcode Command Line Tools, CMake, Ninja, and Python 3 installed.
+You also need an LLVM source checkout. Your chosen LLVM version may have
+additional requirements.
+
+Build the app from source:
 
 ```sh
 git clone git@github.com:xiongzile/llvm-dev-workbench.git
@@ -22,155 +23,102 @@ scripts/build-macos.sh
 open "dist/LLVM Workbench.app"
 ```
 
-The script builds the shared Core and SwiftUI app, then creates a locally
-ad-hoc-signed app bundle. The app is not notarized. This project uses a build
-script; an Xcode project is not required.
+You can then copy `dist/LLVM Workbench.app` into your Applications folder and
+launch it normally. The current app is locally signed and is not notarized.
 
-1. Open the LLVM source directory (the parent of `llvm/`, `clang/`, and `runtimes/`).
-2. Choose a saved environment, or choose **新建环境**. Existing build directories are not auto-imported.
-3. Select projects, backends, and runtimes. These lists come from that checkout.
-4. Save and prepare the environment. This runs CMake; it does not build all LLVM.
-5. Select an actual target, such as `clang`, `llc`, `opt`, or a library, and build it.
-6. Use **运行…** for executable arguments, **测试** for regression tests, or
-   **在 Finder 中显示** to locate an output. Running first updates the target.
+## Your first build
 
-The editor supports compiler paths and compile concurrency. New builds default to
-8 compile jobs, 1 link job, 2 TableGen jobs, assertions, and optimized TableGen.
-Lower compile concurrency on memory-constrained machines. Modes are
-RelWithDebInfo (daily), Debug (debugging), and Release (fast validation).
+1. Open the app and select your LLVM checkout: the directory containing `llvm/`,
+   `clang/`, and `runtimes/`, rather than the `llvm/` subdirectory.
+2. Click **新建环境** and give it a name, such as `Daily`. An environment is a
+   saved set of component choices and build settings, with its own build directory.
+3. For a first Clang build, select the `clang` project, the `Native` backend, and
+   the daily development mode. Leave runtimes empty unless you need them.
+4. Save with **保存后准备环境** enabled, or click **准备环境** afterwards. Wait for
+   preparation to finish; this configures the build without compiling all LLVM.
+5. Find `clang` in the target list, select it, and click **构建 clang**.
+6. When the build finishes, click **运行…**, enter `--version`, and click
+   **构建并运行**. The output appears in the task log.
 
-## Shared Core, two thin frontends
+The first build can take a while. Subsequent builds reuse that environment's
+outputs. The bottom task area shows progress and logs; you can cancel a running
+operation there.
+
+## Choose what to work on
+
+The environment editor lists the components available in your LLVM checkout.
+
+| Choice | What to select |
+|---|---|
+| Projects | Additional tools and projects, such as `clang`, `lld`, or `mlir`. LLVM's own tools are available without selecting an additional project. |
+| Backends | The architectures you need to generate or test code for. `Native` selects your host architecture; add others when your work needs them. |
+| Runtimes | Libraries such as `libcxx` or `compiler-rt`, when those are part of your work. Selecting `libcxx` also adds its required compiler and companion runtimes. |
+| Build mode | Daily development keeps debug symbols and assertions. Debug is useful for stepping through code; Release is available for optimized builds. |
+| Compiler and concurrency | Choose compiler paths when needed. Lower compile concurrency if builds use too much memory. |
+
+To change the components later, edit the environment and prepare it again. To
+try a different compiler or build mode after configuration, use **复制…** to
+create a separate environment. Switch environments in the sidebar.
+
+Existing build directories are not imported automatically. Create an environment
+explicitly even if you have previously built LLVM by hand.
+
+## Build and run tools
+
+Open **产物**, search for a target, and select it. The list reflects the current
+environment, so enable the relevant project or backend if something is missing.
+
+- Click **构建** to build the selected target and its dependencies.
+- Click **运行…** to run an executable. Enter **one argument per line**; a path
+  containing spaces stays on one line. Workbench updates the build before running.
+- Use **在 Finder 中显示** to locate a generated output.
+- **已生成** means the output exists. After changing source code, build or run it
+  again to update it.
+
+You can select tools such as `clang`, `llc`, `opt`, and `llvm-mc`, as well as
+libraries and test targets. Workbench builds individual targets; it does not yet
+package a complete LLVM toolchain for distribution.
+
+## Run tests
+
+1. Open **测试**.
+2. Click **选择…** and choose a regression test file or directory inside your
+   LLVM checkout.
+3. Click **运行测试** and inspect the result in the logs.
+
+Selected-test support covers LLVM, Clang, LLD, MLIR, and bootstrap libc++ tests.
+For a whole suite, select an available `check-*` target, such as `check-llvm`,
+and build it. Architecture-specific tests need the corresponding backend enabled.
+
+## Find outputs and clean up
+
+Your LLVM build outputs are stored under:
 
 ```text
-Rust CLI ─────────────────────┐
-                             ├── Rust Core ── CMake / Ninja / lit / built tools
-SwiftUI app ── in-process ABI ┘
+<llvm-checkout>/build/<environment-name>/
 ```
 
-The app links `libllvm_dev_core.dylib` directly. It never runs the CLI. A small C
-ABI carries structured domain requests/results into Swift Codable models. Core
-owns settings, validation, build plans, target discovery, process groups,
-cancellation, locks, and persisted history. Swift owns UI and native file/IDE
-integration; the CLI owns terminal arguments and output.
+The **环境** page shows the exact path. If a directory already exists, Workbench
+chooses another name instead of overwriting it.
 
-| Source | Responsibility |
-|---|---|
-| `crates/llvm-dev-core` | Shared domain and execution engine |
-| `crates/llvm-dev-cli` | Native CLI frontend |
-| `apps/macos` | SwiftUI app, typed bridge, and C ABI header |
-| `scripts` | App packaging, icon generation, and native checks |
-| `tests/macos` | Swift model and Core integration tests |
-| `docs` | Architecture and validation guide |
+To reclaim space, wait for the build to stop and delete that environment's build
+directory. Its saved settings remain in
+`~/Library/Application Support/LLVMWorkbench/`. Reopen or refresh the workspace,
+select the environment, and click **准备环境** to build again.
 
-Generated `target/`, `build/`, and `dist/` directories are ignored by Git and can
-be recreated. They hold this application's build outputs, separate from the LLVM
-build directories it manages. See [architecture](docs/architecture.md).
+## Optional: use the CLI
 
-## Native CLI
-
-Build with `cargo build --release --workspace`. The root `./llvm-dev` launcher
-executes `target/release/llvm-dev`; it contains no build policy.
+The app build also creates the `llvm-dev` command. For the CLI alone, run
+`cargo build --release --workspace`. From this repository, try:
 
 ```sh
-./llvm-dev --source /path/to/llvm-project inspect
-./llvm-dev --source /path/to/llvm-project catalog
-./llvm-dev --source /path/to/llvm-project init --name Daily --projects clang,lld --backends Native
+./llvm-dev --source /path/to/llvm-project init --name Daily --projects clang --backends Native
 ./llvm-dev --source /path/to/llvm-project --profile Daily configure
 ./llvm-dev --source /path/to/llvm-project --profile Daily targets
 ./llvm-dev --source /path/to/llvm-project --profile Daily build clang llc
 ./llvm-dev --source /path/to/llvm-project --profile Daily run clang -- --version
-./llvm-dev --source /path/to/llvm-project --profile Daily edit --backends Native,RISCV
-./llvm-dev --source /path/to/llvm-project --profile Daily configure
-./llvm-dev --source /path/to/llvm-project --profile Daily clone --name Debug --mode debug
-./llvm-dev --source /path/to/llvm-project --profile Daily test llvm/test/path/to/test.ll --dry-run
 ```
 
-Lists accept commas or semicolons. `--json` returns structured output;
-`--dry-run` on configure/build/run/test returns the exact Core plan without
-starting processes. A build requires explicit targets. Ctrl-C cancels the CLI's
-owned process group. `run ... -- --help` passes help through to the built tool.
-
-`init` creates a profile. `edit` changes a saved profile. `clone` creates a
-separate build tree from a saved profile. After
-changing projects/backends/runtimes or concurrency, prepare the environment
-again. Changing mode/compiler in an already-configured environment requires a
-copy, preserving the earlier incremental build.
-
-## Environment definitions and disposable build outputs
-
-Workbench only lists environments explicitly saved through its UI or CLI. It
-never scans `build/`, `llvm/build/`, or `cmake-build*` to create environments.
-Opening a checkout for the first time shows an empty environment list.
-
-Environment definitions, app settings, logs, history, and locks live under
-`~/Library/Application Support/LLVMWorkbench` on macOS and
-`$XDG_STATE_HOME/llvm-workbench` (default `~/.local/state/llvm-workbench`) elsewhere.
-`LLVM_WORKBENCH_HOME` overrides this application-state root.
-
-Build outputs live under `<llvm-checkout>/build/<environment-name>/`. A safe,
-readable directory name is derived from the environment name. Existing files,
-symlinks, and paths reserved by another environment are not reused; a numeric
-suffix resolves collisions. Renaming a saved environment does not move its build.
-The editor previews the build directory; the environments page shows both the
-configuration file and build directory.
-
-Deleting an environment's build directory, or the checkout's entire `build/`,
-does not delete its definition. Reopen/refresh the workspace, choose **准备环境**,
-and build again. CMake regenerates its cache, Ninja rules, and target metadata
-using the saved projects, backends, runtimes, compiler paths, and build mode.
-CMake cache files inside `build/` are disposable generated state, not the source
-of truth for Workbench environments.
-
-On opening a workspace with profiles from 0.2.0/0.2.1, builds that used the old
-application-state `builds/` location are assigned checkout-local directories.
-Profile IDs/settings are retained and the previous definitions are backed up
-under `backups/` in application state. Absolute-path CMake caches are not copied
-or moved; prepare the new directory before building. Old outputs are retained.
-A running old build keeps its location until a later workspace refresh.
-
-Source files, unrelated build directories, CMake presets, CLion settings, and
-Git configuration are preserved.
-
-Target types and output paths come from CMake File API. A read-only Ninja
-fallback can list build targets when metadata is absent, but cannot reliably
-classify executable outputs; prepare the saved environment for full discovery.
-“已生成” means the output exists; it does not claim the output is current.
-Running always builds first and never substitutes a system compiler/tool.
-
-CLI and app share OS locks per build directory. Conflicting operations
-or edits are rejected. Cancellation sends signals to the owned process group,
-reaps it, and releases the lock before publishing completion. Unrelated builds
-started outside this tool do not participate in its lock protocol.
-
-## Tests and runtimes
-
-Core routes selected LLVM, Clang, LLD, MLIR, and bootstrap libc++ regression test
-paths to their dependency targets and `llvm-lit`. Other suites can be built/run
-through their discovered `check-*` targets. Architecture-specific LLVM CodeGen/MC
-tests are rejected when their backend is disabled.
-
-libc++ selection adds Clang, libc++abi, and libunwind for the bootstrap runtime
-workflow. Runtime tests use the generated runtime test tree. All other projects
-and backends are general selectable components, not hardcoded development tracks.
-
-## Current boundaries
-
-- Single-configuration Ninja monorepo builds; macOS app currently arm64 only.
-- External prerequisites and project-specific optional dependencies are detected
-  or reported by CMake, not installed automatically.
-- Source opening in a chosen IDE is supported; embedded debugging, IDE preset
-  synchronization, cross toolchains/sysroots, and standalone runtimes are not.
-- Individual outputs and paths are available; redistributable LLVM toolchain
-  packaging is not implemented. A usable Clang distribution needs more than its
-  binary (resource headers and runtime libraries, for example).
-- Linux support is in the Core/CLI design, but this preview was tested on macOS.
-- License choice, universal builds, and notarization remain future work.
-
-Validation scope and manual checks: see [testing](docs/testing.md).
-Run the automated checks with:
-
-```sh
-cargo test --workspace -- --test-threads=1
-scripts/build-macos.sh
-scripts/test-macos.sh
-```
+Use `./llvm-dev --help` for more commands. Add `--dry-run` to configure, build,
+run, or test commands to preview what will execute. Press Ctrl-C to cancel.
+Environments saved in the app are also available in the CLI.
