@@ -1,0 +1,13 @@
+[package]
+name = "llvm-dev-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "llvm-dev"
+path = "src/main.rs"
+
+[dependencies]
+llvm-dev-core = { path = "../llvm-dev-core" }
+serde_json.workspace = true
+libc.workspace = true

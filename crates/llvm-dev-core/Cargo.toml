@@ -1,0 +1,13 @@
+[package]
+name = "llvm-dev-core"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "llvm_dev_core"
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+libc.workspace = true
