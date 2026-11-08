@@ -421,16 +421,16 @@ pub struct Artifact {
 }
 pub fn description(name: &str) -> String {
     match name {
-        "clang" => "C / C++ 前端与编译驱动",
-        "llc" => "LLVM IR / MIR 到目标机器码",
-        "opt" => "LLVM IR 优化与分析",
-        "llvm-mc" => "汇编与指令编码",
-        "FileCheck" => "回归测试输出检查",
-        "clangd" => "C / C++ 语言服务",
-        "clang-tidy" => "Clang 代码检查",
-        "mlir-opt" => "MLIR 转换与优化",
-        "lld" => "链接器",
-        _ => "CMake 构建目标",
+        "clang" => "C / C++ frontend and compiler driver",
+        "llc" => "LLVM IR / MIR to machine code",
+        "opt" => "LLVM IR optimization and analysis",
+        "llvm-mc" => "Assembly and instruction encoding",
+        "FileCheck" => "Regression test output checks",
+        "clangd" => "C / C++ language server",
+        "clang-tidy" => "Clang code checks",
+        "mlir-opt" => "MLIR transformations and optimization",
+        "lld" => "Linker",
+        _ => "CMake build target",
     }
     .into()
 }

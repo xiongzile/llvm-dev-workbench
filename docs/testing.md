@@ -29,11 +29,16 @@ The six Core integration tests cover:
 The Swift integration check uses the real presentation model and shared Core.
 It covers immediate busy state before the first asynchronous suspension,
 duplicate-click suppression, startup cancellation, failure reporting, and retry.
-It does not automate the rendered UI or native file picker.
+It also validates both bundled language resources, format arguments, system
+language fallback, persisted language selection, legacy history labels, and
+language changes during an active task. It does not automate the rendered UI or
+native file picker.
 
 ## Manual smoke check
 
-1. Open the app and select a disposable LLVM checkout.
+1. Open the app and select a disposable LLVM checkout. Use the Language menu to
+   try English, Simplified Chinese, and Follow System. Check navigation, the
+   environment editor, run/test controls, logs, and history in both languages.
 2. Create an environment with Clang and the Native backend. Verify the build
    directory is under that checkout and the configuration is in application state.
 3. Prepare the environment, select an output, and build it. Click whitespace in

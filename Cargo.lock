@@ -16,7 +16,7 @@ checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
 
 [[package]]
 name = "llvm-dev-cli"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "libc",
  "llvm-dev-core",
@@ -25,7 +25,7 @@ dependencies = [
 
 [[package]]
 name = "llvm-dev-core"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "libc",
  "serde",

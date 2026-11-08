@@ -5,7 +5,7 @@ build commands. Choose the components you need, build a tool, and run its tests
 from one window.
 
 Built through **vibe coding**, with a **Claude-inspired UI**. Supports **macOS 14+
-on Apple Silicon**. The app interface is currently in Chinese. This is an
+on Apple Silicon**. The app supports English and Simplified Chinese. This is an
 independent project, unaffiliated with LLVM or Anthropic.
 
 ## Install and open
@@ -26,19 +26,29 @@ open "dist/LLVM Workbench.app"
 You can then copy `dist/LLVM Workbench.app` into your Applications folder and
 launch it normally. The current app is locally signed and is not notarized.
 
+## Choose your language
+
+The app follows your macOS language preferences by default. Use **Language** at
+the bottom of the sidebar, or the **Language** menu, to choose **Follow System**,
+**English**, or **Simplified Chinese**. The change takes effect immediately and
+is remembered next time you open the app. Your environments and build settings
+stay the same. Compiler output is shown in its original language.
+
+This guide uses the English interface labels.
+
 ## Your first build
 
 1. Open the app and select your LLVM checkout: the directory containing `llvm/`,
    `clang/`, and `runtimes/`, rather than the `llvm/` subdirectory.
-2. Click **新建环境** and give it a name, such as `Daily`. An environment is a
+2. Click **New Environment** and give it a name, such as `Daily`. An environment is a
    saved set of component choices and build settings, with its own build directory.
 3. For a first Clang build, select the `clang` project, the `Native` backend, and
    the daily development mode. Leave runtimes empty unless you need them.
-4. Save with **保存后准备环境** enabled, or click **准备环境** afterwards. Wait for
+4. Save with **Prepare after saving** enabled, or click **Prepare Environment** afterwards. Wait for
    preparation to finish; this configures the build without compiling all LLVM.
-5. Find `clang` in the target list, select it, and click **构建 clang**.
-6. When the build finishes, click **运行…**, enter `--version`, and click
-   **构建并运行**. The output appears in the task log.
+5. Find `clang` in the target list, select it, and click **Build clang**.
+6. When the build finishes, click **Run…**, enter `--version`, and click
+   **Build & Run**. The output appears in the task log.
 
 The first build can take a while. Subsequent builds reuse that environment's
 outputs. The bottom task area shows progress and logs; you can cancel a running
@@ -57,7 +67,7 @@ The environment editor lists the components available in your LLVM checkout.
 | Compiler and concurrency | Choose compiler paths when needed. Lower compile concurrency if builds use too much memory. |
 
 To change the components later, edit the environment and prepare it again. To
-try a different compiler or build mode after configuration, use **复制…** to
+try a different compiler or build mode after configuration, use **Duplicate…** to
 create a separate environment. Switch environments in the sidebar.
 
 Existing build directories are not imported automatically. Create an environment
@@ -65,14 +75,14 @@ explicitly even if you have previously built LLVM by hand.
 
 ## Build and run tools
 
-Open **产物**, search for a target, and select it. The list reflects the current
+Open **Artifacts**, search for a target, and select it. The list reflects the current
 environment, so enable the relevant project or backend if something is missing.
 
-- Click **构建** to build the selected target and its dependencies.
-- Click **运行…** to run an executable. Enter **one argument per line**; a path
+- Click **Build** to build the selected target and its dependencies.
+- Click **Run…** to run an executable. Enter **one argument per line**; a path
   containing spaces stays on one line. Workbench updates the build before running.
-- Use **在 Finder 中显示** to locate a generated output.
-- **已生成** means the output exists. After changing source code, build or run it
+- Use **Show in Finder** to locate a generated output.
+- **Built** means the output exists. After changing source code, build or run it
   again to update it.
 
 You can select tools such as `clang`, `llc`, `opt`, and `llvm-mc`, as well as
@@ -81,10 +91,10 @@ package a complete LLVM toolchain for distribution.
 
 ## Run tests
 
-1. Open **测试**.
-2. Click **选择…** and choose a regression test file or directory inside your
+1. Open **Tests**.
+2. Click **Choose…** and choose a regression test file or directory inside your
    LLVM checkout.
-3. Click **运行测试** and inspect the result in the logs.
+3. Click **Run Tests** and inspect the result in the logs.
 
 Selected-test support covers LLVM, Clang, LLD, MLIR, and bootstrap libc++ tests.
 For a whole suite, select an available `check-*` target, such as `check-llvm`,
@@ -98,13 +108,13 @@ Your LLVM build outputs are stored under:
 <llvm-checkout>/build/<environment-name>/
 ```
 
-The **环境** page shows the exact path. If a directory already exists, Workbench
+The **Environments** page shows the exact path. If a directory already exists, Workbench
 chooses another name instead of overwriting it.
 
 To reclaim space, wait for the build to stop and delete that environment's build
 directory. Its saved settings remain in
 `~/Library/Application Support/LLVMWorkbench/`. Reopen or refresh the workspace,
-select the environment, and click **准备环境** to build again.
+select the environment, and click **Prepare Environment** to build again.
 
 ## Optional: use the CLI
 

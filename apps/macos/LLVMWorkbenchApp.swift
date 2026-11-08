@@ -17,9 +17,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main struct LLVMWorkbenchApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
   @StateObject var model = WorkspaceModel()
+  @StateObject private var language = LanguageSettings.shared
   var body: some Scene {
     WindowGroup("LLVM Workbench") {
       WorkbenchView().environmentObject(model).frame(minWidth: 1080, minHeight: 720)
+        .environment(\.locale, language.locale)
         .task {
           guard model.workspace == nil else { return }
           let args = CommandLine.arguments
@@ -33,14 +35,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }.defaultSize(width: 1380, height: 900).windowStyle(.hiddenTitleBar)
       .commands {
         CommandGroup(replacing: .newItem) {
-          Button("打开 LLVM 工作区…") { model.openPanel() }.keyboardShortcut("o")
+          Button(L("Open LLVM Workspace…")) { model.openPanel() }.keyboardShortcut("o")
         }
-        CommandMenu("构建") {
-          Button("构建所选目标") {
+        CommandMenu(L("Build")) {
+          Button(L("Build Selected Target")) {
             if let a = model.selected { model.start("build", targets: [a.name]) }
           }.keyboardShortcut("b").disabled(model.running || model.selected == nil)
-          Button("取消当前任务") { model.cancel() }.keyboardShortcut(".").disabled(!model.running)
-          Button("显示日志") { model.showLogs = true }.keyboardShortcut("l")
+          Button(L("Cancel Current Task")) { model.cancel() }.keyboardShortcut(".").disabled(
+            !model.running)
+          Button(L("Show Logs")) { model.showLogs = true }.keyboardShortcut("l")
+        }
+        CommandMenu(L("Language")) {
+          LanguagePicker()
         }
       }
   }

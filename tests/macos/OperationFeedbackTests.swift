@@ -12,6 +12,16 @@ import Foundation
   }
 
   @MainActor static func main() async throws {
+    try LocalizationTests.run()
+    let savedLanguage = UserDefaults.standard.string(forKey: L10n.preferenceKey)
+    defer {
+      if let savedLanguage {
+        UserDefaults.standard.set(savedLanguage, forKey: L10n.preferenceKey)
+      } else {
+        UserDefaults.standard.removeObject(forKey: L10n.preferenceKey)
+      }
+    }
+    UserDefaults.standard.set("en", forKey: L10n.preferenceKey)
     let home = URL(fileURLWithPath: ProcessInfo.processInfo.environment["LLVM_WORKBENCH_HOME"]!)
     let root = home.appendingPathComponent("checkout")
     for component in ["llvm", "clang"] {
@@ -47,8 +57,12 @@ import Foundation
     precondition(model.history.count == 1, "Duplicate request reached Core")
 
     model.start("build", targets: ["slow"])
-    precondition(model.running && model.starting && model.activityTitle == "构建中…")
-    precondition(model.taskPhase.contains("构建中"))
+    precondition(model.running && model.starting && model.activityTitle == "Building…")
+    precondition(model.taskPhase == "Starting task…")
+    UserDefaults.standard.set("zh-Hans", forKey: L10n.preferenceKey)
+    precondition(model.running && model.activityTitle == "构建中…")
+    precondition(model.taskPhase == "正在启动任务…")
+    precondition(model.profileId == profile.id && model.page == .workbench)
     model.start("build", targets: ["ok"])
     try await waitUntil { model.job?.status == "running" }
     precondition(model.error == nil, "Repeat click produced an error")
@@ -57,6 +71,7 @@ import Foundation
     precondition(model.job?.status == "cancelled")
     await model.refreshHistory()
     precondition(model.history.count == 2, "Repeat click created an extra task")
+    UserDefaults.standard.set("en", forKey: L10n.preferenceKey)
 
     model.start("build", targets: ["slow"])
     model.cancel()  // Cancel while start is still awaiting a Core operation ID.

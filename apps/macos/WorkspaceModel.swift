@@ -9,8 +9,8 @@ import SwiftUI
   @Published var pending = false
   @Published var search = ""
   @Published var selectedArtifact = ""
-  @Published var category = "工具"
-  @Published var page = "工作台"
+  @Published var category: ArtifactCategory = .tools
+  @Published var page: WorkbenchPage = .workbench
   @Published var busy = false
   @Published var error: String?
   @Published var job: CoreJob?
@@ -27,20 +27,20 @@ import SwiftUI
   private var cancellationSent = false
   var running: Bool { starting || job?.status == "running" }
   var activityTitle: String {
-    if cancellationRequested { return "取消中…" }
+    if cancellationRequested { return L("Cancelling…") }
     switch activeOperation {
-    case "configure": return "准备中…"
-    case "run": return "运行中…"
-    case "test": return "测试中…"
-    default: return "构建中…"
+    case "configure": return L("Preparing…")
+    case "run": return L("Running…")
+    case "test": return L("Testing…")
+    default: return L("Building…")
     }
   }
   var taskPhase: String {
-    if running && cancellationRequested { return "正在取消…" }
-    if starting { return activityTitle + " 正在准备任务" }
-    if job?.status == "running" { return "正在" + (job?.phase ?? "执行任务") }
-    if startFailed { return "启动失败" }
-    return job?.phase ?? "准备好开始工作"
+    if running && cancellationRequested { return L("Cancelling…") }
+    if starting { return L("Starting task…") }
+    if job?.status == "running" { return L10n.coreText(job?.phase ?? "Running") }
+    if startFailed { return L("Could not start") }
+    return job.map { L10n.coreText($0.phase) } ?? L("Ready to start")
   }
   var profile: Profile? { workspace?.profiles.first { $0.id == profileId } }
   var selected: Artifact? { artifacts.first { $0.name == selectedArtifact } }
@@ -49,14 +49,14 @@ import SwiftUI
     return artifacts.filter { a in
       let matches =
         search.isEmpty || a.name.localizedCaseInsensitiveContains(search)
-        || a.description.localizedCaseInsensitiveContains(search)
+        || L10n.coreText(a.description).localizedCaseInsensitiveContains(search)
       let kind =
-        page == "测试"
+        page == .tests
         ? a.name.hasPrefix("check-")
-        : category == "工具"
+        : category == .tools
           ? a.kind == "EXECUTABLE"
-          : category == "库"
-            ? a.kind.contains("LIBRARY") : category == "测试" ? a.name.hasPrefix("check-") : true
+          : category == .libraries
+            ? a.kind.contains("LIBRARY") : category == .tests ? a.name.hasPrefix("check-") : true
       return matches && kind
     }.sorted { a, b in
       let i = priorities.firstIndex(of: a.name) ?? 999
@@ -66,15 +66,15 @@ import SwiftUI
   }
   func openPanel() {
     guard !running else {
-      error = "请先等待当前任务结束，或取消任务后再切换工作区。"
+      error = "Wait for the current task to finish or cancel it before switching workspaces."
       return
     }
     let panel = NSOpenPanel()
     panel.canChooseFiles = false
     panel.canChooseDirectories = true
     panel.allowsMultipleSelection = false
-    panel.message = "选择 LLVM 源码目录"
-    panel.prompt = "打开工作区"
+    panel.message = L("Select the LLVM source directory")
+    panel.prompt = L("Open Workspace")
     if panel.runModal() == .OK, let url = panel.url { Task { await open(url.path) } }
   }
   func open(_ path: String) async {
@@ -86,8 +86,8 @@ import SwiftUI
         search = ""
         selectedArtifact = ""
         testPath = ""
-        category = "工具"
-        page = "工作台"
+        category = .tools
+        page = .workbench
         if !running { job = nil }
       }
       workspace = snapshot
@@ -100,7 +100,7 @@ import SwiftUI
       }
       await refreshArtifacts()
       await refreshHistory()
-    } catch { self.error = error.localizedDescription }
+    } catch { self.error = (error as? CoreFailure)?.message ?? error.localizedDescription }
   }
   func selectProfile(_ id: String) {
     profileId = id
@@ -128,12 +128,12 @@ import SwiftUI
       if !artifacts.contains(where: { $0.name == selectedArtifact }) {
         selectedArtifact = filtered.first?.name ?? ""
       }
-    } catch { self.error = error.localizedDescription }
+    } catch { self.error = (error as? CoreFailure)?.message ?? error.localizedDescription }
   }
   func refreshHistory() async {
     guard let root = workspace?.root else { return }
     do { history = try await Core.call(["action": "history", "root": root]) } catch {
-      self.error = error.localizedDescription
+      self.error = (error as? CoreFailure)?.message ?? error.localizedDescription
     }
   }
   func createEnvironment(copy: Profile? = nil) {
@@ -142,7 +142,7 @@ import SwiftUI
     if copy != nil {
       p.id = ""
       p.buildDir = ""
-      p.name += " 副本"
+      p.name = L("%@ copy", p.name)
     }
     editor = p
   }
@@ -168,7 +168,7 @@ import SwiftUI
       profileId = saved.id
       await open(root)
       if prepare { start("configure") }
-    } catch { self.error = error.localizedDescription }
+    } catch { self.error = (error as? CoreFailure)?.message ?? error.localizedDescription }
   }
   func start(
     _ operation: String, targets: [String] = [], target: String = "", arguments: [String] = [],
@@ -198,7 +198,7 @@ import SwiftUI
         activeOperation = nil
         cancellationRequested = false
         startFailed = true
-        self.error = error.localizedDescription
+        self.error = (error as? CoreFailure)?.message ?? error.localizedDescription
       }
     }
   }
@@ -220,7 +220,7 @@ import SwiftUI
         }
         try await Task.sleep(nanoseconds: 500_000_000)
       } catch {
-        self.error = error.localizedDescription
+        self.error = (error as? CoreFailure)?.message ?? error.localizedDescription
         return
       }
     }
@@ -237,7 +237,7 @@ import SwiftUI
     do { let _: CoreJob = try await Core.call(["action": "cancel", "id": id]) } catch {
       cancellationSent = false
       cancellationRequested = false
-      self.error = error.localizedDescription
+      self.error = (error as? CoreFailure)?.message ?? error.localizedDescription
     }
   }
   func chooseTest() {
@@ -245,7 +245,7 @@ import SwiftUI
     panel.canChooseDirectories = true
     panel.canChooseFiles = true
     panel.allowsMultipleSelection = false
-    panel.message = "选择源码仓库中的回归测试文件或目录"
+    panel.message = L("Select a regression test file or directory in the source checkout")
     if let root = workspace?.root { panel.directoryURL = URL(fileURLWithPath: root) }
     if panel.runModal() == .OK { testPath = panel.url?.path ?? "" }
   }
@@ -257,7 +257,7 @@ import SwiftUI
     let panel = NSOpenPanel()
     panel.directoryURL = URL(fileURLWithPath: "/Applications")
     panel.allowedContentTypes = [.application]
-    panel.message = "选择 IDE，打开 LLVM 源码工程"
+    panel.message = L("Choose an IDE to open the LLVM source")
     if panel.runModal() == .OK, let app = panel.url {
       NSWorkspace.shared.open(
         [URL(fileURLWithPath: root + "/llvm")], withApplicationAt: app,

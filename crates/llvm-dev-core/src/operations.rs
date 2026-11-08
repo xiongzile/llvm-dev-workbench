@@ -164,7 +164,7 @@ pub fn make_plan(root: &Path, profile: &Profile, request: &Value) -> Result<Plan
                 .into_iter()
                 .map(|(k, v)| format!("-D{k}={v}")),
         );
-        steps.push(step(root, "准备环境", cmake, args));
+        steps.push(step(root, "Preparing environment", cmake, args));
     } else {
         let c = check_source(root, profile)?;
         if pending(profile) {
@@ -182,7 +182,7 @@ pub fn make_plan(root: &Path, profile: &Profile, request: &Value) -> Result<Plan
             targets = vec![name.into()];
             after = Some(step(
                 root,
-                "运行工具",
+                "Running tool",
                 target.paths[0].clone(),
                 strings(request, "arguments"),
             ));
@@ -257,7 +257,7 @@ pub fn make_plan(root: &Path, profile: &Profile, request: &Value) -> Result<Plan
                 .unwrap_or(required_program("python3")?);
             after = Some(step(
                 root,
-                "运行回归测试",
+                "Running regression tests",
                 python,
                 vec![
                     build.join("bin/llvm-lit").to_string_lossy().into(),
@@ -292,9 +292,9 @@ pub fn make_plan(root: &Path, profile: &Profile, request: &Value) -> Result<Plan
         steps.push(step(
             root,
             if kind == "test" {
-                "更新测试依赖"
+                "Updating test dependencies"
             } else {
-                "构建工具"
+                "Building tools"
             },
             cmake,
             args,
@@ -479,7 +479,7 @@ pub fn start(plan: Plan) -> Result<Value> {
             .first()
             .map(|s| s.label.clone())
             .unwrap_or_default(),
-        phase: "启动".into(),
+        phase: "Starting".into(),
         status: "running".into(),
         started: now(),
         finished: None,
@@ -517,9 +517,9 @@ pub fn start(plan: Plan) -> Result<Value> {
             }
             .into();
             state.phase = match state.status.as_str() {
-                "succeeded" => "完成",
-                "cancelled" => "已取消",
-                _ => "失败",
+                "succeeded" => "Completed",
+                "cancelled" => "Cancelled",
+                _ => "Failed",
             }
             .into();
         }

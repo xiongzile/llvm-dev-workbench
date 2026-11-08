@@ -58,22 +58,24 @@ struct CoreJob: Decodable, Identifiable {
 }
 struct CoreFailure: LocalizedError {
   let message: String
-  var errorDescription: String? { message }
+  var errorDescription: String? { L10n.coreText(message) }
 }
 enum Core {
   static func sync<T: Decodable>(_ request: [String: Any], as type: T.Type = T.self) throws -> T {
     let input = try JSONSerialization.data(withJSONObject: request)
     let response: String = try String(decoding: input, as: UTF8.self).withCString { pointer in
-      guard let result = llvmwb_request(pointer) else { throw CoreFailure(message: "Core 没有返回结果") }
+      guard let result = llvmwb_request(pointer) else {
+        throw CoreFailure(message: "No response from the build engine")
+      }
       defer { llvmwb_free(result) }
       return String(cString: result)
     }
     let data = Data(response.utf8)
     guard let envelope = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-      throw CoreFailure(message: "无效的 Core 响应")
+      throw CoreFailure(message: "Invalid build engine response")
     }
     guard envelope["ok"] as? Bool == true else {
-      throw CoreFailure(message: envelope["error"] as? String ?? "Core 请求失败")
+      throw CoreFailure(message: envelope["error"] as? String ?? "Build engine request failed")
     }
     let body = try JSONSerialization.data(
       withJSONObject: envelope["data"] as Any, options: [.fragmentsAllowed])
