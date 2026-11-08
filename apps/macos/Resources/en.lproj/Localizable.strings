@@ -189,3 +189,104 @@
 "Unsupported runtime in this checkout: %@" = "Unsupported runtime in this checkout: %@";
 "%@ appears in both projects and runtimes." = "%@ appears in both projects and runtimes.";
 "Set %@ using the dedicated environment controls." = "Set %@ using the dedicated environment controls.";
+"Linker" = "Linker";
+"Linker: %@" = "Linker: %@";
+"System default" = "System default";
+"Custom path…" = "Custom path…";
+"Absolute linker path" = "Absolute linker path";
+"LLD must be installed separately. Selecting the lld project only builds it." = "LLD must be installed separately. Selecting the lld project only builds it.";
+"Choose system, lld, or an absolute linker path." = "Choose system, lld, or an absolute linker path.";
+"Use a linker path without whitespace or shell special characters." = "Use a linker path without whitespace or shell special characters.";
+"LLD was not found. Install LLD or select its absolute path." = "LLD was not found. Install LLD or select its absolute path.";
+"Linker is not executable: %@" = "Linker is not executable: %@";
+
+// IDE collaboration
+"Open in IDE…" = "Open in IDE…";
+"Your environment. Your IDE." = "Your environment. Your IDE.";
+"Open with the same compiler, projects, linker and build outputs." = "Open with the same compiler, projects, linker and build outputs.";
+"The environment will be prepared before opening." = "The environment will be prepared before opening.";
+"Build / debug target" = "Build / debug target";
+"Source only" = "Source only";
+"Program arguments (one per line)" = "Program arguments (one per line)";
+"Existing IDE run arguments are preserved when reopening." = "Existing IDE run arguments are preserved when reopening.";
+"Set up clangd and CodeLLDB extensions" = "Set up clangd and CodeLLDB extensions";
+"Uses the official VS Code Marketplace. Already installed extensions are kept." = "Uses the official VS Code Marketplace. Already installed extensions are kept.";
+"Release builds have limited debug information. Use a Dev or Debug environment for debugging." = "Release builds have limited debug information. Use a Dev or Debug environment for debugging.";
+"IDE files stay in Workbench's application folder. Source files and build outputs stay in your LLVM checkout." = "IDE files stay in Workbench's application folder. Source files and build outputs stay in your LLVM checkout.";
+"Show generated files" = "Show generated files";
+"Prepare & Open" = "Prepare & Open";
+"Preparing IDE…" = "Preparing IDE…";
+"Preparing generated headers…" = "Preparing generated headers…";
+"Preparing generated headers" = "Preparing generated headers";
+"Preparing environment…" = "Preparing environment…";
+"Setting up VS Code extensions…" = "Setting up VS Code extensions…";
+"Setting up VS Code extensions" = "Setting up VS Code extensions";
+"Generating IDE configuration…" = "Generating IDE configuration…";
+"Opening IDE…" = "Opening IDE…";
+"CLion is not installed." = "CLion is not installed.";
+"VS Code is not installed." = "VS Code is not installed.";
+"VS Code was not found. Install it before setting up extensions." = "VS Code was not found. Install it before setting up extensions.";
+"Choose CLion or VS Code." = "Choose CLion or VS Code.";
+"Settings changed. Prepare the environment before opening an IDE." = "Settings changed. Prepare the environment before opening an IDE.";
+"Compilation database is missing. Prepare the environment before opening an IDE." = "Compilation database is missing. Prepare the environment before opening an IDE.";
+"The selected IDE target is unavailable. Refresh the environment." = "The selected IDE target is unavailable. Refresh the environment.";
+"clangd was not found. Install LLVM with clangd before opening VS Code." = "clangd was not found. Install LLVM with clangd before opening VS Code.";
+"The generated VS Code workspace contains invalid JSON or comments. Save it as valid JSON before exporting again; your file has not been changed." = "The generated VS Code workspace contains invalid JSON or comments. Save it as valid JSON before exporting again; your file has not been changed.";
+
+"Ready" = "Ready";
+
+"Open in IDE" = "Open in IDE";
+
+"Resize sidebar" = "Resize sidebar";
+
+"Resize target details" = "Resize target details";
+
+"%ld s" = "%ld s";
+
+"%ld min %ld s" = "%ld min %ld s";
+
+"Building %ld%%" = "Building %ld%%";
+
+"Built %ld" = "Built %ld";
+
+"Building %ld" = "Building %ld";
+
+"Not built %ld" = "Not built %ld";
+
+"Total %ld" = "Total %ld";
+
+"Progress counts build steps, not elapsed time." = "Progress counts build steps, not elapsed time.";
+
+"Output presence; building checks whether it is up to date." = "Output presence; building checks whether it is up to date.";
+
+"Counts cover the selected category. Targets without output files are included only in the total." = "Counts cover the selected category. Targets without output files are included only in the total.";
+
+"Favorite target" = "Favorite target";
+
+"Copy target name" = "Copy target name";
+
+"Copy output path" = "Copy output path";
+
+"Target actions" = "Target actions";
+
+"Run with arguments…" = "Run with arguments…";
+
+"Run actions" = "Run actions";
+
+"Recent tasks" = "Recent tasks";
+
+"No recorded tasks for this target." = "No recorded tasks for this target.";
+
+"Build log" = "Build log";
+
+"Log preview unavailable" = "Log preview unavailable";
+
+"%ld / %ld build steps" = "%ld / %ld build steps";
+
+"Show favorites only" = "Show favorites only";
+
+"Last task" = "Last task";
+
+"Showing %ld / %ld targets" = "Showing %ld / %ld targets";
+
+"Run Selected Target" = "Run Selected Target";

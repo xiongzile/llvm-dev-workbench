@@ -154,8 +154,13 @@ pub struct Profile {
     pub jobs: u32,
     pub cc: String,
     pub cxx: String,
+    #[serde(default = "default_linker")]
+    pub linker: String,
     #[serde(default)]
     pub definitions: BTreeMap<String, String>,
+}
+fn default_linker() -> String {
+    "system".into()
 }
 impl Profile {
     pub fn build_type(&self) -> &str {
@@ -278,6 +283,13 @@ pub fn validate(root: &Path, profile: &mut Profile) -> Result<()> {
     if !(1..=128).contains(&profile.jobs) {
         return Err("Compile jobs must be between 1 and 128.".into());
     }
+    profile.linker = profile.linker.trim().to_owned();
+    if !["system", "lld"].contains(&profile.linker.as_str())
+        && !Path::new(&profile.linker).is_absolute()
+    {
+        return Err("Choose system, lld, or an absolute linker path.".into());
+    }
+    validate_linker_path(&profile.linker)?;
     let caps = capabilities(root)?;
     for (kind, selected, available) in [
         ("project", &profile.projects, &caps.projects),
@@ -327,6 +339,8 @@ pub fn validate(root: &Path, profile: &mut Profile) -> Result<()> {
             "LLVM_TARGETS_TO_BUILD",
             "CMAKE_C_COMPILER",
             "CMAKE_CXX_COMPILER",
+            "LLVM_USE_LINKER",
+            "LLVM_ENABLE_LLD",
         ]
         .contains(&k.as_str())
         {
@@ -383,7 +397,67 @@ pub fn tool_path(name: &str) -> Option<PathBuf> {
     dirs.into_iter().map(|p| p.join(name)).find(|p| p.is_file())
 }
 pub fn tools() -> Value {
-    json!({"cmake":tool_path("cmake"),"ninja":tool_path("ninja"),"python":tool_path("python3"),"cc":tool_path("clang"),"cxx":tool_path("clang++")})
+    json!({"cmake":tool_path("cmake"),"ninja":tool_path("ninja"),"python":tool_path("python3"),"cc":tool_path("clang"),"cxx":tool_path("clang++"),"lld":find_lld(&default_profile())})
+}
+fn executable(path: &Path) -> bool {
+    let Ok(metadata) = path.metadata() else {
+        return false;
+    };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    metadata.is_file()
+}
+pub fn find_lld(profile: &Profile) -> Option<PathBuf> {
+    // macOS requires the Mach-O driver; ld.lld is the ELF linker.
+    let name = if cfg!(target_os = "macos") {
+        "ld64.lld"
+    } else {
+        "ld.lld"
+    };
+    let mut candidates = Vec::new();
+    for compiler in [&profile.cxx, &profile.cc] {
+        if let Some(path) = tool_path(compiler).and_then(|p| p.parent().map(Path::to_path_buf)) {
+            candidates.push(path.join(name));
+        }
+    }
+    if let Some(path) = tool_path(name) {
+        candidates.push(path);
+    }
+    for prefix in [
+        "/opt/homebrew/opt/lld/bin",
+        "/opt/homebrew/opt/llvm/bin",
+        "/usr/local/opt/lld/bin",
+        "/usr/local/opt/llvm/bin",
+    ] {
+        candidates.push(Path::new(prefix).join(name));
+    }
+    candidates.into_iter().find(|path| executable(path))
+}
+pub fn resolved_linker(profile: &Profile) -> Result<String> {
+    let path = match profile.linker.as_str() {
+        "system" => Ok(String::new()),
+        "lld" => find_lld(profile)
+            .map(|p| p.to_string_lossy().into())
+            .ok_or_else(|| "LLD was not found. Install LLD or select its absolute path.".into()),
+        path if Path::new(path).is_absolute() && executable(Path::new(path)) => Ok(path.into()),
+        path => Err(format!("Linker is not executable: {path}")),
+    }?;
+    validate_linker_path(&path)?;
+    Ok(path)
+}
+fn validate_linker_path(path: &str) -> Result<()> {
+    // LLVM inserts this value into shell linker flags without quoting it.
+    if path
+        .chars()
+        .any(|c| !c.is_alphanumeric() && !"/._-+@:= ".contains(c) || c.is_whitespace())
+    {
+        return Err("Use a linker path without whitespace or shell special characters.".into());
+    }
+    Ok(())
 }
 pub fn default_profile() -> Profile {
     Profile {
@@ -401,6 +475,7 @@ pub fn default_profile() -> Profile {
         cxx: tool_path("clang++")
             .map(|p| p.to_string_lossy().into())
             .unwrap_or_default(),
+        linker: default_linker(),
         definitions: BTreeMap::new(),
     }
 }

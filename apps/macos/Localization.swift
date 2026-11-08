@@ -47,8 +47,6 @@ struct LocalizedContent<Content: View>: View {
 enum WorkbenchPage: String, CaseIterable {
   case workbench = "Workbench"
   case environments = "Environments"
-  case artifacts = "Artifacts"
-  case tests = "Tests"
   case history = "History"
   var title: String { L(rawValue) }
 }
@@ -130,6 +128,7 @@ struct L10n {
       "Unsupported runtime in this checkout: %@",
       "%@ appears in both projects and runtimes.",
       "Set %@ using the dedicated environment controls.",
+      "Linker is not executable: %@",
     ] {
       let parts = template.components(separatedBy: "%@")
       if value.hasPrefix(parts[0]), value.hasSuffix(parts[1]),

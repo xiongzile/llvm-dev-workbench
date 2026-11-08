@@ -6,7 +6,7 @@ use std::os::{fd::AsRawFd, unix::process::CommandExt};
 use std::{
     collections::{BTreeMap, VecDeque},
     fs::{self, File, OpenOptions},
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{
@@ -80,7 +80,7 @@ fn step(root: &Path, label: &str, program: String, args: Vec<String>) -> Step {
         cwd: root.to_string_lossy().into(),
     }
 }
-fn configure_values(profile: &Profile) -> BTreeMap<String, String> {
+pub(crate) fn configure_values(profile: &Profile) -> Result<BTreeMap<String, String>> {
     let mut v: BTreeMap<String, String> = [
         ("CMAKE_BUILD_TYPE", profile.build_type().to_string()),
         ("LLVM_ENABLE_PROJECTS", profile.projects.join(";")),
@@ -93,6 +93,8 @@ fn configure_values(profile: &Profile) -> BTreeMap<String, String> {
         ("LLVM_PARALLEL_COMPILE_JOBS", profile.jobs.to_string()),
         ("LLVM_PARALLEL_LINK_JOBS", "1".into()),
         ("LLVM_PARALLEL_TABLEGEN_JOBS", "2".into()),
+        ("LLVM_USE_LINKER", resolved_linker(profile)?),
+        ("LLVM_ENABLE_LLD", "OFF".into()),
     ]
     .into_iter()
     .map(|(k, v)| (k.into(), v))
@@ -110,11 +112,18 @@ fn configure_values(profile: &Profile) -> BTreeMap<String, String> {
         v.insert("Python3_EXECUTABLE".into(), p.to_string_lossy().into());
     }
     v.extend(profile.definitions.clone());
-    v
+    Ok(v)
+}
+fn linker_changed(c: &BTreeMap<String, String>, values: &BTreeMap<String, String>) -> bool {
+    c.get("LLVM_USE_LINKER").map(String::as_str).unwrap_or("") != values["LLVM_USE_LINKER"]
+        || c.get("LLVM_ENABLE_LLD")
+            .is_some_and(|v| !["", "OFF", "FALSE", "NO", "0"].contains(&v.to_uppercase().as_str()))
 }
 pub fn pending(profile: &Profile) -> bool {
     let c = cache(Path::new(&profile.build_dir));
-    let values = configure_values(profile);
+    let Ok(values) = configure_values(profile) else {
+        return true;
+    };
     [
         "CMAKE_BUILD_TYPE",
         "LLVM_ENABLE_PROJECTS",
@@ -124,7 +133,11 @@ pub fn pending(profile: &Profile) -> bool {
     ]
     .iter()
     .any(|k| c.get(*k) != values.get(*k))
-        || profile.definitions.iter().any(|(k, v)| c.get(k) != Some(v))
+        || profile
+            .definitions
+            .iter()
+            .any(|(k, v)| !crate::ide::definition_matches(k, v, c.get(k)))
+        || linker_changed(&c, &values)
 }
 fn strings(v: &Value, key: &str) -> Vec<String> {
     v[key]
@@ -141,6 +154,39 @@ fn field<'a>(v: &'a Value, key: &str) -> Result<&'a str> {
 }
 pub fn make_plan(root: &Path, profile: &Profile, request: &Value) -> Result<Plan> {
     let kind = request["operation"].as_str().unwrap_or("build");
+    if kind == "ide_extensions" {
+        let home = std::env::var("HOME").unwrap_or_default();
+        let cli = [
+            PathBuf::from("/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"),
+            PathBuf::from(home)
+                .join("Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"),
+        ]
+        .into_iter()
+        .find(|p| p.is_file())
+        .or_else(|| tool_path("code"))
+        .ok_or("VS Code was not found. Install it before setting up extensions.")?;
+        return Ok(Plan {
+            root: root.to_string_lossy().into(),
+            profile_id: profile.id.clone(),
+            build_dir: profile.build_dir.clone(),
+            kind: kind.into(),
+            query: false,
+            steps: [
+                "llvm-vs-code-extensions.vscode-clangd",
+                "vadimcn.vscode-lldb",
+            ]
+            .iter()
+            .map(|id| {
+                step(
+                    root,
+                    "Setting up VS Code extensions",
+                    cli.to_string_lossy().into(),
+                    vec!["--install-extension".into(), id.to_string()],
+                )
+            })
+            .collect(),
+        });
+    }
     let mut steps = vec![];
     let build = Path::new(&profile.build_dir);
     let cmake = required_program("cmake")?;
@@ -159,11 +205,22 @@ pub fn make_plan(root: &Path, profile: &Profile, request: &Value) -> Result<Plan
             "-G".into(),
             "Ninja".into(),
         ];
-        args.extend(
-            configure_values(&checked)
-                .into_iter()
-                .map(|(k, v)| format!("-D{k}={v}")),
-        );
+        let values = configure_values(&checked)?;
+        if linker_changed(&cache(build), &values) {
+            // LLVM caches both the linker family and the compiler compatibility
+            // probe. Changing only LLVM_USE_LINKER leaves these results stale.
+            for key in [
+                "LLVM_LINKER_DETECTED",
+                "LLVM_LINKER_IS_*",
+                "LLVM_LINKER_SUPPORTS_*",
+                "LINKER_SUPPORTS_*",
+                "CXX_SUPPORTS_CUSTOM_LINKER",
+                "_CAN_LINK_EXECUTABLE",
+            ] {
+                args.extend(["-U".into(), key.into()]);
+            }
+        }
+        args.extend(values.into_iter().map(|(k, v)| format!("-D{k}={v}")));
         steps.push(step(root, "Preparing environment", cmake, args));
     } else {
         let c = check_source(root, profile)?;
@@ -173,7 +230,31 @@ pub fn make_plan(root: &Path, profile: &Profile, request: &Value) -> Result<Plan
         let catalog = artifacts(build)?;
         let mut targets = strings(request, "targets");
         let mut after = None;
-        if kind == "run" {
+        if kind == "ide_headers" {
+            // Configuration creates the build graph, not TableGen outputs.
+            // IDEs preprocess PCH inputs while loading, before a user build.
+            // Use the resolved graph: clang can enable MLIR transitively.
+            targets = [
+                "llvm-headers",
+                "clang-tablegen-targets",
+                "mlir-headers",
+                "flang-headers",
+            ]
+            .into_iter()
+            .filter(|name| catalog.iter().any(|t| t.name == *name))
+            .map(str::to_owned)
+            .collect();
+            if targets.is_empty() {
+                return Ok(Plan {
+                    root: root.to_string_lossy().into(),
+                    profile_id: profile.id.clone(),
+                    build_dir: profile.build_dir.clone(),
+                    kind: kind.into(),
+                    steps,
+                    query: false,
+                });
+            }
+        } else if kind == "run" {
             let name = field(request, "target")?;
             let target = catalog
                 .iter()
@@ -293,6 +374,8 @@ pub fn make_plan(root: &Path, profile: &Profile, request: &Value) -> Result<Plan
             root,
             if kind == "test" {
                 "Updating test dependencies"
+            } else if kind == "ide_headers" {
+                "Preparing generated headers"
             } else {
                 "Building tools"
             },
@@ -318,6 +401,12 @@ pub struct JobState {
     pub root: String,
     pub profile_id: String,
     pub title: String,
+    #[serde(default)]
+    pub operation: String,
+    #[serde(default)]
+    pub targets: Vec<String>,
+    #[serde(default)]
+    pub progress: Option<BuildProgress>,
     pub phase: String,
     pub status: String,
     pub started: u64,
@@ -327,6 +416,70 @@ pub struct JobState {
     pub log_path: String,
     pub line_count: u64,
     pub lines: VecDeque<String>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BuildProgress {
+    pub completed: u64,
+    pub total: u64,
+}
+fn ninja_progress(line: &str) -> Option<BuildProgress> {
+    let (counts, _) = line.strip_prefix('[')?.split_once("] ")?;
+    let (completed, total) = counts.split_once('/')?;
+    let completed = completed.parse().ok()?;
+    let total = total.parse().ok()?;
+    (total > 0 && completed <= total).then_some(BuildProgress { completed, total })
+}
+fn command_targets(args: &[String]) -> Vec<String> {
+    if args.first().map(String::as_str) != Some("--build") {
+        return vec![];
+    }
+    args.iter()
+        .position(|a| a == "--target")
+        .map(|i| {
+            args[i + 1..]
+                .iter()
+                .take_while(|a| !a.starts_with('-'))
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default()
+}
+fn recover_targets(path: &Path) -> Vec<String> {
+    let Ok(file) = File::open(path) else {
+        return vec![];
+    };
+    // Old logs contain a structured command before build output. Do not guess
+    // target names from translated titles or scan arbitrarily large logs.
+    for line in BufReader::new(file.take(32768))
+        .lines()
+        .map_while(std::result::Result::ok)
+    {
+        if let Ok(value) = serde_json::from_str::<Value>(&line) {
+            let targets = command_targets(&strings(&value, "args"));
+            if !targets.is_empty() {
+                return targets;
+            }
+        }
+    }
+    vec![]
+}
+fn log_excerpt(path: &Path) -> Result<Value> {
+    let mut file = File::open(path).map_err(|e| e.to_string())?;
+    let size = file.metadata().map_err(|e| e.to_string())?.len();
+    let offset = size.saturating_sub(65536);
+    file.seek(SeekFrom::Start(offset))
+        .map_err(|e| e.to_string())?;
+    let mut bytes = Vec::new();
+    file.take(65536)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    let text = String::from_utf8_lossy(&bytes);
+    let mut lines: Vec<_> = text.lines().collect();
+    if offset > 0 && !lines.is_empty() {
+        lines.remove(0);
+    }
+    let start = lines.len().saturating_sub(100);
+    Ok(json!({"lines": &lines[start..], "truncated": offset > 0 || start > 0}))
 }
 struct Job {
     state: Mutex<JobState>,
@@ -351,6 +504,17 @@ fn persist(job: &Job) {
 fn log(job: &Job, line: String) {
     let _ = writeln!(job.log.lock().unwrap(), "{line}");
     let mut state = job.state.lock().unwrap();
+    if [
+        "Building tools",
+        "Updating test dependencies",
+        "Preparing generated headers",
+    ]
+    .contains(&state.phase.as_str())
+    {
+        if let Some(progress) = ninja_progress(&line) {
+            state.progress = Some(progress);
+        }
+    }
     state.line_count += 1;
     state.lines.push_back(line);
     while state.lines.len() > 500 {
@@ -385,6 +549,7 @@ fn run_steps(plan: &Plan, job: &Arc<Job>) -> Result<i32> {
         {
             let mut state = job.state.lock().unwrap();
             state.phase = spec.label.clone();
+            state.progress = None;
         }
         persist(job);
         log(
@@ -474,6 +639,13 @@ pub fn start(plan: Plan) -> Result<Value> {
         id: id.clone(),
         root: plan.root.clone(),
         profile_id: plan.profile_id.clone(),
+        operation: plan.kind.clone(),
+        targets: plan
+            .steps
+            .iter()
+            .flat_map(|s| command_targets(&s.args))
+            .collect(),
+        progress: None,
         title: plan
             .steps
             .first()
@@ -588,6 +760,9 @@ pub fn dispatch(request: Value) -> Result<Value> {
         let mut records = vec![];
         for p in files.into_iter().take(60) {
             if let Ok(mut record) = read_json(&p) {
+                if record.get("targets").is_none() {
+                    record["targets"] = json!(recover_targets(&p.with_extension("log")));
+                }
                 if record["status"] == "running" {
                     let pid = record["owner_pid"].as_u64().unwrap_or(0) as i32;
                     #[cfg(unix)]
@@ -600,8 +775,22 @@ pub fn dispatch(request: Value) -> Result<Value> {
         }
         return Ok(json!(records));
     }
+    if action == "job_log" {
+        let id = field(&request, "id")?;
+        if id.is_empty()
+            || id.len() > 120
+            || !id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        {
+            return Err("Invalid task ID".into());
+        }
+        let dir = history_dir(&root);
+        read_json(&dir.join(format!("{id}.json")))?;
+        return log_excerpt(&dir.join(format!("{id}.log")));
+    }
     // Serialize planning against profile changes until start has taken its build lock.
-    let _settings_guard = if action == "start" {
+    let _settings_guard = if action == "start" || action == "ide" {
         Some(Lock::acquire(&format!(
             "settings-{}",
             workspace_key(&root)
@@ -611,6 +800,7 @@ pub fn dispatch(request: Value) -> Result<Value> {
     };
     let profile = get_profile(&root, field(&request, "profile_id")?)?;
     match action {
+        "ide" => crate::ide::export(&root, &profile, &request),
         "artifacts" => Ok(
             json!({"artifacts":artifacts(Path::new(&profile.build_dir))?,"configured":Path::new(&profile.build_dir).join("CMakeCache.txt").exists(),"pending":pending(&profile),"cache":cache(Path::new(&profile.build_dir))}),
         ),
@@ -619,5 +809,37 @@ pub fn dispatch(request: Value) -> Result<Value> {
         }
         "start" => start(make_plan(&root, &profile, &request)?),
         _ => Err(format!("Unknown action: {action}")),
+    }
+}
+
+#[cfg(test)]
+mod dashboard_tests {
+    use super::*;
+    #[test]
+    fn only_real_ninja_counts_are_progress() {
+        let p = ninja_progress("[12/250] Building CXX object test.o").unwrap();
+        assert_eq!((p.completed, p.total), (12, 250));
+        for line in [
+            "[2/0] invalid",
+            "[5/4] invalid",
+            "[thing/4] invalid",
+            "[1/2]",
+            "estimated 30%",
+        ] {
+            assert!(ninja_progress(line).is_none());
+        }
+        assert!(command_targets(&["--version".into()]).is_empty());
+        assert_eq!(
+            command_targets(&[
+                "--build".into(),
+                "/tmp/build with spaces".into(),
+                "--target".into(),
+                "clang".into(),
+                "llc".into(),
+                "--".into(),
+                "-v".into()
+            ]),
+            vec!["clang", "llc"]
+        );
     }
 }

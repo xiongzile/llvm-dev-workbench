@@ -30,16 +30,33 @@ import Foundation
     }
     try """
     cmake_minimum_required(VERSION 3.20)
-    project(FeedbackFixture LANGUAGES NONE)
+    project(FeedbackFixture LANGUAGES C)
+    file(WRITE "${CMAKE_BINARY_DIR}/ide.c" "int main(void) { return 0; }")
+    add_executable(ide-tool "${CMAKE_BINARY_DIR}/ide.c")
     set(LLVM_ALL_PROJECTS "clang")
     set(LLVM_ALL_TARGETS AArch64 X86)
     set(LLVM_SUPPORTED_RUNTIMES "libcxx")
     add_custom_target(slow COMMAND "${CMAKE_COMMAND}" -E sleep 30)
     add_custom_target(ok COMMAND "${CMAKE_COMMAND}" -E echo "feedback test completed")
     add_custom_target(fail COMMAND "${CMAKE_COMMAND}" -E false)
+    add_custom_target(llvm-headers COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_SOURCE_DIR}/headers.cmake")
     """.write(
       to: root.appendingPathComponent("llvm/CMakeLists.txt"), atomically: true, encoding: .utf8)
+    try """
+    if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/fail-headers")
+      message(FATAL_ERROR "Header generation failed")
+    endif()
+    file(WRITE "ide-headers-ready" "ready")
+    """.write(to: root.appendingPathComponent("llvm/headers.cmake"), atomically: true, encoding: .utf8)
     let snapshot: Workspace = try await Core.call(["action": "inspect", "root": root.path])
+    precondition(snapshot.defaultProfile.linker == "system")
+    var lldProfile = snapshot.defaultProfile
+    lldProfile.linker = "lld"
+    let savedLLD: Profile = try await Core.call([
+      "action": "save_profile", "root": root.path, "profile": try Core.encode(lldProfile),
+    ])
+    let reopened: Workspace = try await Core.call(["action": "inspect", "root": root.path])
+    precondition(reopened.profiles.first(where: { $0.id == savedLLD.id })?.linker == "lld")
     let profile: Profile = try await Core.call([
       "action": "save_profile", "root": root.path,
       "profile": try Core.encode(snapshot.defaultProfile),
@@ -58,6 +75,7 @@ import Foundation
 
     model.start("build", targets: ["slow"])
     precondition(model.running && model.starting && model.activityTitle == "Building…")
+    precondition(model.isBuilding("slow") && !model.isBuilding("ide-tool"), "Busy state must belong to the requested target")
     precondition(model.taskPhase == "Starting task…")
     UserDefaults.standard.set("zh-Hans", forKey: L10n.preferenceKey)
     precondition(model.running && model.activityTitle == "构建中…")
@@ -89,6 +107,47 @@ import Foundation
     model.start("build", targets: ["ok"])
     try await waitUntil { !model.running }
     precondition(model.job?.status == "succeeded" && !model.startFailed)
-    print("PASS: immediate feedback, duplicate clicks, startup cancellation, failure recovery")
+    precondition(model.job?.targets == ["ok"] && model.job?.operation == "build")
+    precondition(model.records(for: "ok").first?.status == "succeeded")
+    precondition(!model.isBuilding("ok"))
+    model.toggleFavorite("ide-tool")
+    model.favoritesOnly = true
+    precondition(model.filtered.map(\.name) == ["ide-tool"])
+    model.toggleFavorite("ide-tool")
+    model.favoritesOnly = false
+    UserDefaults.standard.removeObject(forKey: "favoriteTargets:" + root.path)
+    var fresh = snapshot.defaultProfile
+    fresh.name = "IDE fresh"
+    let ideProfile: Profile = try await Core.call([
+      "action": "save_profile", "root": root.path, "profile": try Core.encode(fresh),
+    ])
+    await model.open(root.path)
+    model.selectProfile(ideProfile.id)
+    model.prepareIDE("clion", target: "", arguments: [], installExtensions: false, launch: false)
+    precondition(model.running && model.ideBusy)
+    model.prepareIDE("vscode", target: "", arguments: [], installExtensions: false, launch: false)
+    model.start("build", targets: ["slow"])
+    model.selectProfile(profile.id)
+    precondition(model.profileId == ideProfile.id)
+    try await waitUntil { !model.running }
+    precondition(model.error == nil, model.error ?? "IDE preparation failed")
+    precondition(model.ideExport?.ide == "clion")
+    precondition(model.configured && !model.pending)
+    precondition(FileManager.default.fileExists(atPath: ideProfile.buildDir + "/ide-headers-ready"))
+    precondition(
+      FileManager.default.fileExists(atPath: model.ideExport!.path + "/.idea/workspace.xml"))
+    try FileManager.default.removeItem(atPath: ideProfile.buildDir + "/ide-headers-ready")
+    model.prepareIDE("clion", target: "", arguments: [], installExtensions: false, launch: false)
+    try await waitUntil { !model.running }
+    precondition(model.ideExport != nil)
+    precondition(FileManager.default.fileExists(atPath: ideProfile.buildDir + "/ide-headers-ready"))
+    try "fail".write(to: root.appendingPathComponent("llvm/fail-headers"), atomically: true, encoding: .utf8)
+    model.prepareIDE("clion", target: "", arguments: [], installExtensions: false, launch: false)
+    try await waitUntil { !model.running }
+    precondition(model.job?.status == "failed")
+    precondition(model.ideExport == nil, "Do not open an IDE after generated-header preparation fails")
+    print(
+      "PASS: immediate feedback, duplicate clicks, startup cancellation, failure recovery, IDE auto-prepare, header recovery and failure gating"
+    )
   }
 }

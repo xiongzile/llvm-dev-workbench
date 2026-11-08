@@ -7,6 +7,11 @@ import SwiftUI
   @Published var artifacts: [Artifact] = []
   @Published var configured = false
   @Published var pending = false
+  @Published var buildCache: [String: String] = [:]
+  @Published private(set) var favorites: Set<String> = []
+  @Published var favoritesOnly = false
+  @Published var focusSearch = 0
+  @Published private(set) var requestedTargets: [String] = []
   @Published var search = ""
   @Published var selectedArtifact = ""
   @Published var category: ArtifactCategory = .tools
@@ -20,14 +25,19 @@ import SwiftUI
   @Published var runArtifact: Artifact?
   @Published var testPath = ""
   @Published var saving = false
+  @Published var showIDE = false
+  @Published private(set) var ideBusy = false
+  @Published private(set) var idePhase = ""
+  @Published var ideExport: IDEExport?
   @Published private(set) var starting = false
   @Published private(set) var activeOperation: String?
   @Published private(set) var cancellationRequested = false
   @Published private(set) var startFailed = false
   private var cancellationSent = false
-  var running: Bool { starting || job?.status == "running" }
+  var running: Bool { ideBusy || starting || job?.status == "running" }
   var activityTitle: String {
     if cancellationRequested { return L("Cancelling…") }
+    if ideBusy { return L(idePhase) }
     switch activeOperation {
     case "configure": return L("Preparing…")
     case "run": return L("Running…")
@@ -44,21 +54,61 @@ import SwiftUI
   }
   var profile: Profile? { workspace?.profiles.first { $0.id == profileId } }
   var selected: Artifact? { artifacts.first { $0.name == selectedArtifact } }
+  var categoryArtifacts: [Artifact] {
+    artifacts.filter { a in
+      switch category {
+      case .tools: return a.kind == "EXECUTABLE"
+      case .libraries: return a.kind.contains("LIBRARY")
+      case .tests: return a.name.hasPrefix("check-")
+      case .all: return true
+      }
+    }
+  }
+  func records(for name: String) -> [CoreJob] {
+    var result = history.filter { $0.profileId == profileId && ($0.targets ?? []).contains(name) }
+    if let job, job.profileId == profileId, (job.targets ?? []).contains(name) {
+      result.removeAll { $0.id == job.id }
+      result.insert(job, at: 0)
+    }
+    return result.sorted { $0.started > $1.started }
+  }
+  func isBuilding(_ name: String) -> Bool {
+    if starting { return requestedTargets.contains(name) }
+    guard let job, job.profileId == profileId, job.status == "running",
+      ["Building tools", "Updating test dependencies", "Preparing generated headers"].contains(
+        job.phase)
+    else { return false }
+    return (job.targets ?? []).contains(name)
+  }
+  func toggleFavorite(_ name: String) {
+    if favorites.contains(name) { favorites.remove(name) } else { favorites.insert(name) }
+    if let root = workspace?.root {
+      UserDefaults.standard.set(favorites.sorted(), forKey: "favoriteTargets:" + root)
+    }
+  }
+  func copy(_ value: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(value, forType: .string)
+  }
+  func openLog(_ record: CoreJob) {
+    NSWorkspace.shared.open(URL(fileURLWithPath: record.logPath))
+  }
+  func requestRun() {
+    guard !running, !pending, let selected, selected.kind == "EXECUTABLE" else { return }
+    runArtifact = selected
+  }
   var filtered: [Artifact] {
     let priorities = ["clang", "llc", "opt", "llvm-mc", "FileCheck"]
-    return artifacts.filter { a in
+    let localization = L10n.current
+    return categoryArtifacts.filter { a in
       let matches =
         search.isEmpty || a.name.localizedCaseInsensitiveContains(search)
-        || L10n.coreText(a.description).localizedCaseInsensitiveContains(search)
-      let kind =
-        page == .tests
-        ? a.name.hasPrefix("check-")
-        : category == .tools
-          ? a.kind == "EXECUTABLE"
-          : category == .libraries
-            ? a.kind.contains("LIBRARY") : category == .tests ? a.name.hasPrefix("check-") : true
-      return matches && kind
+        || localization.translatedCoreText(a.description).localizedCaseInsensitiveContains(search)
+      return matches && (!favoritesOnly || favorites.contains(a.name))
     }.sorted { a, b in
+      if favorites.contains(a.name) != favorites.contains(b.name) {
+        return favorites.contains(a.name)
+      }
       let i = priorities.firstIndex(of: a.name) ?? 999
       let j = priorities.firstIndex(of: b.name) ?? 999
       return i == j ? a.name < b.name : i < j
@@ -91,6 +141,8 @@ import SwiftUI
         if !running { job = nil }
       }
       workspace = snapshot
+      favorites = Set(
+        UserDefaults.standard.stringArray(forKey: "favoriteTargets:" + snapshot.root) ?? [])
       UserDefaults.standard.set(snapshot.root, forKey: "lastWorkspace")
       if !snapshot.profiles.contains(where: { $0.id == profileId }) {
         profileId =
@@ -103,6 +155,7 @@ import SwiftUI
     } catch { self.error = (error as? CoreFailure)?.message ?? error.localizedDescription }
   }
   func selectProfile(_ id: String) {
+    guard !running else { return }
     profileId = id
     if let root = workspace?.root { UserDefaults.standard.set(id, forKey: "profile:" + root) }
     Task { await refreshArtifacts() }
@@ -112,6 +165,7 @@ import SwiftUI
       artifacts = []
       configured = false
       pending = false
+      buildCache = [:]
       return
     }
     let id = profile.id
@@ -125,6 +179,7 @@ import SwiftUI
       artifacts = result.artifacts
       configured = result.configured
       pending = result.pending
+      buildCache = result.cache
       if !artifacts.contains(where: { $0.name == selectedArtifact }) {
         selectedArtifact = filtered.first?.name ?? ""
       }
@@ -178,6 +233,7 @@ import SwiftUI
     // Reserve the UI synchronously, before planning or any async suspension.
     // This covers repeated mouse clicks, keyboard shortcuts, and other entry points.
     activeOperation = operation
+    requestedTargets = operation == "run" ? [target] : targets
     starting = true
     cancellationRequested = false
     cancellationSent = false
@@ -226,7 +282,7 @@ import SwiftUI
     }
   }
   func cancel() {
-    guard running, !cancellationRequested else { return }
+    guard starting || job?.status == "running", !cancellationRequested else { return }
     cancellationRequested = true
     // A click during planning is remembered until Core returns the operation ID.
     if let id = job?.id { Task { await requestCancellation(id) } }
@@ -253,15 +309,78 @@ import SwiftUI
     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
   }
   func openIDE() {
-    guard let root = workspace?.root else { return }
-    let panel = NSOpenPanel()
-    panel.directoryURL = URL(fileURLWithPath: "/Applications")
-    panel.allowedContentTypes = [.application]
-    panel.message = L("Choose an IDE to open the LLVM source")
-    if panel.runModal() == .OK, let app = panel.url {
-      NSWorkspace.shared.open(
-        [URL(fileURLWithPath: root + "/llvm")], withApplicationAt: app,
-        configuration: NSWorkspace.OpenConfiguration())
+    guard !running, profile != nil else { return }
+    showIDE = true
+  }
+  func prepareIDE(
+    _ ide: String, target: String, arguments: [String], installExtensions: Bool, launch: Bool = true
+  ) {
+    guard !running, let workspace, let profile else { return }
+    // Reserve immediately; preparation, extension setup, export and launch form one UI action.
+    ideBusy = true
+    idePhase = "Preparing IDE…"
+    error = nil
+    ideExport = nil
+    Task {
+      defer {
+        ideBusy = false
+        activeOperation = nil
+        starting = false
+      }
+      do {
+        let identifier = ide == "clion" ? "com.jetbrains.CLion" : "com.microsoft.VSCode"
+        let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: identifier)
+        if launch && app == nil {
+          throw CoreFailure(
+            message: ide == "clion" ? "CLion is not installed." : "VS Code is not installed.")
+        }
+        let state: ArtifactResult = try await Core.call([
+          "action": "artifacts", "root": workspace.root, "profile_id": profile.id,
+        ])
+        var operations: [String] = []
+        if !state.configured || state.pending
+          || !FileManager.default.fileExists(atPath: profile.buildDir + "/compile_commands.json")
+        {
+          operations.append("configure")
+        }
+        operations.append("ide_headers")
+        if ide == "vscode" && installExtensions { operations.append("ide_extensions") }
+        for operation in operations {
+          switch operation {
+          case "configure": idePhase = "Preparing environment…"
+          case "ide_headers": idePhase = "Preparing generated headers…"
+          default: idePhase = "Setting up VS Code extensions…"
+          }
+          activeOperation = operation
+          starting = true
+          job = nil
+          cancellationRequested = false
+          cancellationSent = false
+          startFailed = false
+          let result: OperationStart = try await Core.call([
+            "action": "start", "root": workspace.root, "profile_id": profile.id,
+            "operation": operation,
+          ])
+          if cancellationRequested { await requestCancellation(result.id) }
+          await poll(result.id)
+          guard job?.status == "succeeded" else { return }
+        }
+        idePhase = "Generating IDE configuration…"
+        let result: IDEExport = try await Core.call([
+          "action": "ide", "root": workspace.root, "profile_id": profile.id,
+          "ide": ide, "target": target, "arguments": arguments,
+        ])
+        ideExport = result
+        if launch, let app {
+          idePhase = "Opening IDE…"
+          try await NSWorkspace.shared.open(
+            [URL(fileURLWithPath: result.path)], withApplicationAt: app,
+            configuration: NSWorkspace.OpenConfiguration())
+          showIDE = false
+        }
+      } catch {
+        self.error = (error as? CoreFailure)?.message ?? error.localizedDescription
+      }
     }
   }
 }

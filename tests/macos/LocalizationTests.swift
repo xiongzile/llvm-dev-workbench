@@ -53,14 +53,14 @@ enum LocalizationTests {
     }
     let settings = LanguageSettings()
     let model = WorkspaceModel()
-    model.page = .tests
+    model.page = .history
     model.category = .libraries
     model.profileId = "unchanged-profile"
     model.selectedArtifact = "check-llvm"
     settings.selection = .simplifiedChinese
     precondition(
       LanguageSettings().selection == .simplifiedChinese, "Language selection was not saved")
-    precondition(model.page.title == "测试")
+    precondition(model.page.title == "历史")
     precondition(L10n.coreText("Preparing environment") == "准备环境")
     precondition(
       CoreFailure(message: "Environment name is required.").localizedDescription == "请填写环境名称。")
@@ -68,7 +68,7 @@ enum LocalizationTests {
       L10n.coreText("Backend RISCV is disabled. Enable it before running these tests.")
         == "后端 RISCV 未启用，请先启用后再运行这些测试。")
     settings.selection = .english
-    precondition(model.page.title == "Tests")
+    precondition(model.page.title == "History")
     precondition(
       model.category == .libraries && model.profileId == "unchanged-profile"
         && model.selectedArtifact == "check-llvm")

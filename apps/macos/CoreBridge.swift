@@ -11,7 +11,12 @@ struct Profile: Codable, Identifiable, Equatable {
   var jobs: Int
   var cc: String
   var cxx: String
+  var linker: String
   var definitions: [String: String]
+
+  var linkerTitle: String {
+    linker == "system" ? L("System default") : linker == "lld" ? "LLD" : linker
+  }
 }
 struct Capabilities: Decodable {
   let projects: [String]
@@ -42,6 +47,13 @@ struct ArtifactResult: Decodable {
   let cache: [String: String]
 }
 struct OperationStart: Decodable { let id: String }
+struct IDEExport: Decodable {
+  let ide: String
+  let path: String
+  let buildDir: String
+  let target: String
+  let debugSymbols: Bool
+}
 struct CoreJob: Decodable, Identifiable {
   let id: String
   let root: String
@@ -55,6 +67,17 @@ struct CoreJob: Decodable, Identifiable {
   let logPath: String
   let lineCount: UInt64
   let lines: [String]
+  let operation: String?
+  let targets: [String]?
+  let progress: BuildProgress?
+}
+struct BuildProgress: Decodable {
+  let completed: UInt64
+  let total: UInt64
+}
+struct LogExcerpt: Decodable {
+  let lines: [String]
+  let truncated: Bool
 }
 struct CoreFailure: LocalizedError {
   let message: String

@@ -189,3 +189,104 @@
 "Unsupported runtime in this checkout: %@" = "当前源码仓库不支持此运行库：%@";
 "%@ appears in both projects and runtimes." = "%@ 同时出现在项目和运行库中。";
 "Set %@ using the dedicated environment controls." = "请使用环境编辑器中的对应选项设置 %@。";
+"Linker" = "链接器";
+"Linker: %@" = "链接器：%@";
+"System default" = "系统默认";
+"Custom path…" = "自定义路径…";
+"Absolute linker path" = "链接器的绝对路径";
+"LLD must be installed separately. Selecting the lld project only builds it." = "请先安装 LLD；勾选 lld 项目只会构建它，不会切换链接器。";
+"Choose system, lld, or an absolute linker path." = "请选择系统默认、LLD 或填写链接器的绝对路径。";
+"Use a linker path without whitespace or shell special characters." = "请使用不含空白或 Shell 特殊字符的链接器路径。";
+"LLD was not found. Install LLD or select its absolute path." = "未找到 LLD，请先安装 LLD 或选择其绝对路径。";
+"Linker is not executable: %@" = "链接器不存在或不可执行：%@";
+
+// IDE collaboration
+"Open in IDE…" = "在 IDE 中打开…";
+"Your environment. Your IDE." = "你的环境，你的 IDE。";
+"Open with the same compiler, projects, linker and build outputs." = "使用当前环境的编译器、项目、链接器和构建产物。";
+"The environment will be prepared before opening." = "打开前会先准备好当前环境。";
+"Build / debug target" = "构建 / 调试目标";
+"Source only" = "仅打开源码";
+"Program arguments (one per line)" = "程序参数（每行一个）";
+"Existing IDE run arguments are preserved when reopening." = "再次打开时保留你在 IDE 中修改的运行参数。";
+"Set up clangd and CodeLLDB extensions" = "配置 clangd 和 CodeLLDB 扩展";
+"Uses the official VS Code Marketplace. Already installed extensions are kept." = "使用 VS Code 官方扩展市场，保留已经安装的扩展。";
+"Release builds have limited debug information. Use a Dev or Debug environment for debugging." = "Release 的调试信息有限。需要调试时，请使用日常开发或 Debug 环境。";
+"IDE files stay in Workbench's application folder. Source files and build outputs stay in your LLVM checkout." = "IDE 配置保存在 Workbench 应用目录，源码和构建产物留在 LLVM 工程中。";
+"Show generated files" = "查看生成的文件";
+"Prepare & Open" = "准备并打开";
+"Preparing IDE…" = "正在准备 IDE…";
+"Preparing generated headers…" = "正在准备生成头文件…";
+"Preparing generated headers" = "准备生成头文件";
+"Preparing environment…" = "正在准备环境…";
+"Setting up VS Code extensions…" = "正在配置 VS Code 扩展…";
+"Setting up VS Code extensions" = "配置 VS Code 扩展";
+"Generating IDE configuration…" = "正在生成 IDE 配置…";
+"Opening IDE…" = "正在打开 IDE…";
+"CLion is not installed." = "尚未安装 CLion。";
+"VS Code is not installed." = "尚未安装 VS Code。";
+"VS Code was not found. Install it before setting up extensions." = "未找到 VS Code，请先安装再配置扩展。";
+"Choose CLion or VS Code." = "请选择 CLion 或 VS Code。";
+"Settings changed. Prepare the environment before opening an IDE." = "设置已变更，请准备环境后再打开 IDE。";
+"Compilation database is missing. Prepare the environment before opening an IDE." = "缺少编译数据库，请准备环境后再打开 IDE。";
+"The selected IDE target is unavailable. Refresh the environment." = "所选 IDE 目标不可用，请刷新环境。";
+"clangd was not found. Install LLVM with clangd before opening VS Code." = "未找到 clangd，请安装包含 clangd 的 LLVM 后再打开 VS Code。";
+"The generated VS Code workspace contains invalid JSON or comments. Save it as valid JSON before exporting again; your file has not been changed." = "VS Code 工作区包含无效 JSON 或注释。请保存为有效 JSON 后重试，原文件未被修改。";
+
+"Ready" = "就绪";
+
+"Open in IDE" = "在 IDE 中打开";
+
+"Resize sidebar" = "调整侧边栏宽度";
+
+"Resize target details" = "调整详情栏宽度";
+
+"%ld s" = "%ld 秒";
+
+"%ld min %ld s" = "%ld 分 %ld 秒";
+
+"Building %ld%%" = "构建中 %ld%%";
+
+"Built %ld" = "已生成 %ld";
+
+"Building %ld" = "构建中 %ld";
+
+"Not built %ld" = "未构建 %ld";
+
+"Total %ld" = "目标总数 %ld";
+
+"Progress counts build steps, not elapsed time." = "进度按已完成构建步骤计算，不代表剩余时间。";
+
+"Output presence; building checks whether it is up to date." = "状态表示产物是否存在；构建时会检查是否需要更新。";
+
+"Counts cover the selected category. Targets without output files are included only in the total." = "统计当前分类。没有输出文件的构建目标仅计入总数。";
+
+"Favorite target" = "收藏目标";
+
+"Copy target name" = "复制目标名称";
+
+"Copy output path" = "复制产物路径";
+
+"Target actions" = "目标操作";
+
+"Run with arguments…" = "设置参数并运行…";
+
+"Run actions" = "运行选项";
+
+"Recent tasks" = "最近任务";
+
+"No recorded tasks for this target." = "此目标暂无任务记录。";
+
+"Build log" = "构建日志";
+
+"Log preview unavailable" = "暂时无法预览日志";
+
+"%ld / %ld build steps" = "%ld / %ld 个构建步骤";
+
+"Show favorites only" = "只看收藏";
+
+"Last task" = "最近任务";
+
+"Showing %ld / %ld targets" = "显示 %ld / %ld 个目标";
+
+"Run Selected Target" = "运行所选目标";

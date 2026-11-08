@@ -27,7 +27,7 @@ fn run() -> Result<(), String> {
         vec![]
     };
     if args.is_empty() || args.iter().any(|s| s == "--help" || s == "-h") {
-        println!("LLVM Workbench — shared Core CLI\n\nllvm-dev [--source PATH] [--profile NAME_OR_ID] COMMAND\n\n  inspect | catalog | profiles | targets | history\n  init --name NAME [--projects LIST] [--backends LIST] [--runtimes LIST] [--mode dev|debug|release]\n  edit --profile NAME [--projects LIST] [--backends LIST] [--runtimes LIST] [--jobs N]\n  clone --profile NAME --name NEW_NAME [--mode dev|debug|release]\n  configure [--dry-run]\n  build TARGET... [--dry-run]\n  run TARGET -- ARG...\n  test PATH [--dry-run]\n\nEach environment is independent. Lists are comma/semicolon separated.\nOnly environments saved by Workbench are listed. Build directories are never auto-imported.\nUse --json for structured output. Ctrl-C cancels the owned process group.");
+        println!("LLVM Workbench — shared Core CLI\n\nllvm-dev [--source PATH] [--profile NAME_OR_ID] COMMAND\n\n  inspect | catalog | profiles | targets | history\n  init --name NAME [--projects LIST] [--backends LIST] [--runtimes LIST] [--mode dev|debug|release]\n  edit --profile NAME [--projects LIST] [--backends LIST] [--runtimes LIST] [--jobs N]\n  clone --profile NAME --name NEW_NAME [--mode dev|debug|release]\n  configure [--dry-run]\n  build TARGET... [--dry-run]\n  run TARGET -- ARG...\n  test PATH [--dry-run]\n  ide clion|vscode [--target TARGET] [-- ARG...]\n\nEnvironment options: --linker system|lld|/absolute/path (init, edit, clone).\n\nEach environment is independent. Lists are comma/semicolon separated.\nOnly environments saved by Workbench are listed. Build directories are never auto-imported.\nUse --json for structured output. Ctrl-C cancels the owned process group.");
         return Ok(());
     }
     let flag = |args: &mut Vec<String>, name: &str| -> bool {
@@ -95,6 +95,7 @@ fn run() -> Result<(), String> {
             ("--mode", "mode"),
             ("--cc", "cc"),
             ("--cxx", "cxx"),
+            ("--linker", "linker"),
         ] {
             if let Some(v) = option(&mut args, option_name)? {
                 p[key] = json!(v);
@@ -129,6 +130,44 @@ fn run() -> Result<(), String> {
         all.first()
     }
     .ok_or("No matching environment. Use init or --profile.")?;
+    if cmd == "ide" {
+        let target = option(&mut args, "--target")?.unwrap_or_default();
+        let ide = args.first().ok_or("Specify clion or vscode")?;
+        if args.len() != 1 {
+            return Err("Use ide clion|vscode [--target TARGET]".into());
+        }
+        if !["clion", "vscode"].contains(&ide.as_str()) {
+            return Err("Choose CLion or VS Code.".into());
+        }
+        if dry {
+            return Err("Use configure --dry-run to preview environment settings. IDE preparation requires the configured target graph.".into());
+        }
+        let state = dispatch(json!({"action":"artifacts","root":root,"profile_id":p["id"]}))?;
+        if state["configured"] != true
+            || state["pending"] == true
+            || !std::path::Path::new(p["build_dir"].as_str().ok_or("Missing build directory")?)
+                .join("compile_commands.json")
+                .is_file()
+        {
+            let job = dispatch(
+                json!({"action":"start","root":root,"profile_id":p["id"],"operation":"configure"}),
+            )?;
+            wait_for_job(&job, !json_output, false)?;
+        }
+        let job = dispatch(
+            json!({"action":"start","root":root,"profile_id":p["id"],"operation":"ide_headers"}),
+        )?;
+        wait_for_job(&job, !json_output, false)?;
+        let value = dispatch(
+            json!({"action":"ide","root":root,"profile_id":p["id"],"ide":ide,"target":target,"arguments":tool_args}),
+        )?;
+        if json_output {
+            println!("{}", serde_json::to_string_pretty(&value).unwrap());
+        } else {
+            println!("Open in {}: {}", ide, value["path"].as_str().unwrap_or(""));
+        }
+        return Ok(());
+    }
     if cmd == "targets" {
         let value = dispatch(json!({"action":"artifacts","root":root,"profile_id":p["id"]}))?;
         if json_output {
@@ -163,6 +202,14 @@ fn run() -> Result<(), String> {
         println!("{}", serde_json::to_string_pretty(&value).unwrap());
         return Ok(());
     }
+    wait_for_job(&value, !json_output, json_output)
+}
+
+fn wait_for_job(
+    value: &serde_json::Value,
+    show_logs: bool,
+    print_json: bool,
+) -> Result<(), String> {
     #[cfg(unix)]
     unsafe {
         libc::signal(libc::SIGINT, interrupt as *const () as usize);
@@ -176,7 +223,7 @@ fn run() -> Result<(), String> {
         let state = dispatch(json!({"action":"poll","id":value["id"]}))?;
         let count = state["line_count"].as_u64().unwrap_or(0);
         let lines = state["lines"].as_array().unwrap();
-        if !json_output {
+        if show_logs {
             let start = lines.len().saturating_sub((count - seen) as usize);
             for line in &lines[start..] {
                 println!("{}", line.as_str().unwrap_or(""));
@@ -184,9 +231,9 @@ fn run() -> Result<(), String> {
         }
         seen = count;
         if state["status"] != "running" {
-            if json_output {
+            if print_json {
                 println!("{}", state);
-            } else {
+            } else if show_logs {
                 println!("{}; log: {}", state["status"], state["log_path"]);
             }
             let code = state["exit_code"].as_i64().unwrap_or(1) as i32;

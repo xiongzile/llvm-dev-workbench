@@ -1,4 +1,5 @@
 //! Shared application core. Neither frontend composes CMake commands or owns build processes.
+mod ide;
 mod operations;
 mod workspace;
 

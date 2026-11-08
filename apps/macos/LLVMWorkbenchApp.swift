@@ -40,7 +40,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         CommandMenu(L("Build")) {
           Button(L("Build Selected Target")) {
             if let a = model.selected { model.start("build", targets: [a.name]) }
-          }.keyboardShortcut("b").disabled(model.running || model.selected == nil)
+          }.keyboardShortcut("b").disabled(model.running || model.pending || model.selected == nil)
+          Button(L("Run Selected Target"), action: model.requestRun).keyboardShortcut("r")
+            .disabled(model.running || model.pending || model.selected?.kind != "EXECUTABLE")
+          Button(L("Search targets…")) {
+            model.page = .workbench
+            model.focusSearch += 1
+          }.keyboardShortcut("f").disabled(!model.configured)
           Button(L("Cancel Current Task")) { model.cancel() }.keyboardShortcut(".").disabled(
             !model.running)
           Button(L("Show Logs")) { model.showLogs = true }.keyboardShortcut("l")
